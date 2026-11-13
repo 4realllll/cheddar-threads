@@ -1,6 +1,10 @@
 """Публикует посты из posts/queue/ в Threads и переносит их в posts/published/.
 
-Запускается из GitHub Actions. Токен берётся из переменной окружения THREADS_TOKEN.
+Пост — файл ГГГГ-ММ-ДД.txt. Если рядом лежит ГГГГ-ММ-ДД.png, пост выходит
+с картинкой (картинка берётся по публичной ссылке raw.githubusercontent.com,
+поэтому репозиторий должен быть публичным; иначе пост выйдет без картинки).
+
+Запускается из GitHub Actions. Токен — переменная окружения THREADS_TOKEN.
 Только стандартная библиотека Python.
 """
 import json
@@ -34,11 +38,41 @@ def call(method: str, path: str, params: dict) -> dict:
         raise RuntimeError(f"{method} {path} -> HTTP {e.code}: {body}") from None
 
 
-def publish(text: str, token: str) -> str:
-    container = call("POST", "/me/threads", {
-        "media_type": "TEXT", "text": text, "access_token": token,
-    })["id"]
+def public_url(rel_path: str) -> str | None:
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    sha = os.environ.get("GITHUB_SHA")
+    if not repo or not sha:
+        return None
+    url = f"https://raw.githubusercontent.com/{repo}/{sha}/{rel_path}"
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return url if resp.status == 200 else None
+    except urllib.error.URLError:
+        return None
+
+
+def wait_ready(container: str, token: str) -> None:
+    for _ in range(20):
+        st = call("GET", f"/{container}", {"fields": "status,error_message", "access_token": token})
+        status = st.get("status")
+        if status in (None, "FINISHED", "PUBLISHED"):
+            return
+        if status in ("ERROR", "EXPIRED"):
+            raise RuntimeError(f"контейнер {status}: {st.get('error_message')}")
+        time.sleep(3)
+    raise RuntimeError("контейнер не успел обработаться")
+
+
+def publish(text: str, token: str, image_url: str | None) -> str:
+    params = {"text": text, "access_token": token}
+    if image_url:
+        params.update(media_type="IMAGE", image_url=image_url)
+    else:
+        params.update(media_type="TEXT")
+    container = call("POST", "/me/threads", params)["id"]
     time.sleep(5)
+    wait_ready(container, token)
     return call("POST", "/me/threads_publish", {
         "creation_id": container, "access_token": token,
     })["id"]
@@ -50,7 +84,7 @@ def main() -> int:
         print("Нет секрета THREADS_TOKEN в настройках репозитория.")
         return 1
 
-    files = sorted(p for p in QUEUE.glob("*.txt"))
+    files = sorted(QUEUE.glob("*.txt"))
     if not files:
         print("Очередь пуста, публиковать нечего.")
         return 0
@@ -62,6 +96,7 @@ def main() -> int:
     failed = False
     for f in files:
         text = f.read_text(encoding="utf-8").strip()
+        png = f.with_suffix(".png")
         if not text:
             print(f"{f.name}: пустой файл, пропускаю")
             f.unlink()
@@ -70,16 +105,27 @@ def main() -> int:
             print(f"{f.name}: {len(text)} символов, больше лимита {MAX_LEN}, пропускаю")
             failed = True
             continue
+
+        image_url = None
+        if png.exists():
+            image_url = public_url(png.relative_to(ROOT).as_posix())
+            if not image_url:
+                print(f"{png.name}: картинка недоступна по публичной ссылке "
+                      "(репозиторий приватный?) — публикую без неё")
+
         try:
-            post_id = publish(text, token)
+            post_id = publish(text, token, image_url)
         except RuntimeError as e:
             print(f"{f.name}: ошибка публикации: {e}")
             failed = True
             continue
-        out = PUBLISHED / f.name
-        out.write_text(f"{text}\n\n---\nthreads_id: {post_id}\n", encoding="utf-8")
+        note = f"\nimage: {png.name}" if image_url else ""
+        (PUBLISHED / f.name).write_text(
+            f"{text}\n\n---\nthreads_id: {post_id}{note}\n", encoding="utf-8")
         f.unlink()
-        print(f"{f.name}: опубликован, id {post_id}")
+        if png.exists():
+            png.rename(PUBLISHED / png.name)
+        print(f"{f.name}: опубликован{' с картинкой' if image_url else ''}, id {post_id}")
     return 1 if failed else 0
 
 
