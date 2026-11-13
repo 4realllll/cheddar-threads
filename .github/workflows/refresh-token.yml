@@ -1,0 +1,27 @@
+name: Продление токена Threads
+
+on:
+  schedule:
+    - cron: "17 6 1,15 * *"  # 1-го и 15-го числа, 09:17 МСК
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Продлить токен
+        env:
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python3 scripts/refresh_token.py
+      - name: Не дать GitHub отключить расписание
+        run: |
+          git config user.name "cheddar-bot"
+          git config user.email "cheddar-bot@users.noreply.github.com"
+          date -u +%F > .last-refresh
+          git add .last-refresh
+          git diff --cached --quiet || git commit -m "Токен продлён"
+          git push
+    permissions:
+      contents: write
