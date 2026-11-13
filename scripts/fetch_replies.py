@@ -73,7 +73,7 @@ def main():
         json.dumps({"me": me, "threads": threads}, ensure_ascii=False, indent=1), encoding="utf-8")
 
     now = dt.datetime.now(dt.timezone(dt.timedelta(hours=3))).strftime("%Y-%m-%d %H:%M МСК")
-    lines = [f"# Комментарии без ответа", f"Обновлено: {now}", ""]
+    lines = ["# Комментарии без ответа", ""]  # без времени: файл меняется только при новых комментариях
     pending = 0
     for t in threads:
         todo = [r for r in t["replies"]
