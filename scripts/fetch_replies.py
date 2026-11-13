@@ -67,6 +67,8 @@ def main():
     answered = {r.get("replied_to", {}).get("id")
                 for t in threads for r in t["replies"] if r.get("username") == me}
     by_id = {r["id"]: r for t in threads for r in t["replies"]}
+    skip_file = OUT / "left-for-nikita.txt"
+    skipped = set(skip_file.read_text().split()) if skip_file.exists() else set()
 
     OUT.mkdir(exist_ok=True)
     (OUT / "conversations.json").write_text(
@@ -77,7 +79,7 @@ def main():
     pending = 0
     for t in threads:
         todo = [r for r in t["replies"]
-                if r.get("username") != me and r["id"] not in answered
+                if r.get("username") != me and r["id"] not in answered and r["id"] not in skipped
                 and r.get("hide_status") in (None, "NOT_HUSHED", "UNHUSHED")]
         if not todo:
             continue
