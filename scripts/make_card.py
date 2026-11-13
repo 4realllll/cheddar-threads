@@ -11,6 +11,7 @@
 """
 import argparse
 import random
+import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -24,11 +25,16 @@ BOLD = ROOT / "assets/fonts/Inter-Bold.otf"
 MEDIUM = ROOT / "assets/fonts/Inter-Medium.otf"
 
 
+def glue(text):
+    """Неразрывный пробел после коротких слов («в 7 утра» не рвётся)."""
+    return re.sub(r"(?<![^\s«(])(\S{1,2}) (?=\S)", "\\1\u00a0", text)
+
+
 def wrap(draw, text, font, width):
     lines = []
-    for para in text.split("\n"):
+    for para in glue(text).split("\n"):
         line = ""
-        for word in para.split():
+        for word in [w for w in para.split(" ") if w]:
             test = f"{line} {word}".strip()
             if draw.textlength(test, font=font) <= width:
                 line = test
