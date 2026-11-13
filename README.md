@@ -2,7 +2,7 @@
 
 Автопостинг Чеддера в Threads (@cheddar_check).
 
-- Облачная задача Claude «Threads Чеддер» каждый день кладёт пост в `posts/queue/ГГГГ-ММ-ДД.txt` и делает push.
+- Облачная задача Claude «Threads Чеддер» 2–3 раза в день кладёт пост в `posts/queue/ГГГГ-ММ-ДД-N.txt` (N — слот: 1 утро, 2 день, 3 вечер) и делает push.
 - GitHub Actions (`publish.yml`) публикует всё из очереди через Threads API и переносит файлы в `posts/published/` с id поста.
 - `refresh-token.yml` 1-го и 15-го числа продлевает токен на 60 дней.
 
